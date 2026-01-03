@@ -449,3 +449,170 @@ option {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* =========================================
+   MOBILE OPTIMIZATION (Fix "Dok Lfo9")
+   ========================================= */
+
+/* Styles de base pour les nouveaux éléments */
+.search-full input {
+  width: 100%;
+}
+
+.city-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.custom-city-form {
+  position: relative;
+  flex: 1;
+}
+
+.custom-city-form input {
+  width: 100%;
+  padding: 12px 35px 12px 15px;
+  font-size: 0.9rem;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+}
+
+.custom-city-form button {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 5px;
+}
+
+.filters-row {
+  display: flex;
+  gap: 15px;
+  width: 100%;
+}
+
+.filter-half {
+  flex: 1; /* Chaque filtre prendra la même place */
+  min-width: 0; /* Empêche le débordement */
+}
+
+/* --- VERSION MOBILE (C'est ici que ça change tout) --- */
+@media (max-width: 768px) {
+  
+  .filters-container {
+    padding: 15px;
+    gap: 10px; /* Moins d'espace entre les éléments */
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* La ligne des villes */
+  .city-row {
+    flex-direction: row; /* On garde côte à côte si possible, ou column si trop petit */
+    gap: 8px;
+  }
+
+  /* On cache le trait "|" sur mobile pour gagner de la place */
+  .separator {
+    display: none;
+  }
+
+  /* Pour que les inputs soient moins hauts sur mobile */
+  input, select, .custom-city-form input {
+    padding: 10px 15px; /* Un peu plus petit */
+    font-size: 0.85rem;
+  }
+
+  /* Les filtres (Type et Note) seront côte à côte sur une seule ligne */
+  .filters-row {
+    flex-direction: row; 
+    gap: 10px;
+  }
+  
+  /* On réduit la taille du Hero (le titre) sur mobile */
+  .hero {
+    padding: 30px 20px 40px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2rem;
+  }
+}
+/* =========================================
+   📱 MOBILE "HERBAANA" DESIGN (Compact)
+   ========================================= */
+
+/* Par défaut (PC), on affiche le Hero */
+.desktop-only { display: block; }
+
+/* La ligne compacte (pour mettre côte à côte) */
+.compact-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+/* La petite barre de recherche "Autre ville" */
+.mini-search-form {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mini-search-form input {
+  width: 100%;
+  padding: 12px 30px 12px 10px; /* Place pour l'icone */
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.85rem;
+  height: 100%; /* Force la même hauteur que le Select */
+}
+
+.mini-search-form button {
+  position: absolute;
+  right: 5px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #002395;
+  cursor: pointer;
+}
+
+/* --- VERSION MOBILE --- */
+@media (max-width: 768px) {
+  
+  /* 1. On cache le gros titre pour gagner de la place */
+  .desktop-only { display: none; }
+
+  /* 2. On compacte le conteneur des filtres */
+  .filters-container {
+    padding: 15px;
+    gap: 10px; /* Espace serré entre les lignes */
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    position: sticky; /* Le menu reste collé en haut quand tu scrolles ! */
+    top: 0;
+    z-index: 50;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+  }
+
+  /* 3. Ajustement des Inputs pour mobile */
+  input, select, .mini-search-form input {
+    font-size: 0.8rem; /* Texte plus petit */
+    padding: 10px;
+    height: 45px; /* Hauteur fixe uniforme */
+  }
+
+  /* 4. On s'assure que le bouton Custom Select a la même hauteur */
+  .filters-container > div > div > div { 
+      padding: 10px !important; 
+      height: 45px !important;
+      display: flex;
+      align-items: center;
+  }
+}
