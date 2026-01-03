@@ -1,72 +1,111 @@
 import { useEffect, useState } from "react";
-// Import des icônes Lucide
 import { Utensils, Coffee, Pizza, Beer, MapPin, Layers } from "lucide-react"; 
 import RestaurantCard from "../components/RestaurantCard";
 import CustomSelect from "../components/CustomSelect";
 
 const ITEMS_PER_PAGE = 12;
+const CACHE_DURATION = 1000 * 60 * 60 * 24; // 24h de cache
+
+// TA CLÉ API
+const API_KEY = "b23395c86f1b46ec8dceb5233cb8cef8";
 
 export default function Restaurants() {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // --- ETATS DES FILTRES ---
+  // --- ETATS ---
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("desc");
-  const [location, setLocation] = useState("Paris"); // Valeur par défaut
+  const [location, setLocation] = useState("Paris");
   const [typeFilter, setTypeFilter] = useState("all");
-  
   const [currentPage, setCurrentPage] = useState(1);
 
-  /* ================= CONFIGURATION DES ZONES GPS ================= */
-  // Pour chaque ville, on définit une "Bounding Box" (Sud, Ouest, Nord, Est)
+  // --- COORDONNÉES (Format Geoapify : LonMin,LatMin,LonMax,LatMax) ---
   const cityCoordinates = {
-    "Paris": "(48.815,2.224,48.902,2.469)",
-    "Saint-Ouen": "(48.895,2.318,48.915,2.350)",   
-    "Neuilly": "(48.877,2.252,48.895,2.288)",       
-    "Boulogne": "(48.825,2.224,48.847,2.256)",      
-    "Versailles": "(48.790,2.110,48.820,2.160)",   
-    "IDF": "(48.0,1.4,49.2,3.6)"                     
+    "Paris": "2.224,48.815,2.469,48.902",
+    "Saint-Ouen": "2.318,48.895,2.350,48.915",
+    "Neuilly": "2.252,48.877,2.288,48.895",
+    "Boulogne": "2.224,48.825,2.256,48.847",
+    "Versailles": "2.110,48.790,2.160,48.820",
+    "IDF": "1.4,48.0,3.6,49.2"
   };
 
-  /* ================= FETCH API ================= */
+  /* ================= FETCH OPTIMISÉ (CACHE + GEOAPIFY) ================= */
   useEffect(() => {
     setLoading(true);
     setPlaces([]); 
 
-    // On récupère les coordonnées de la ville choisie
-    const bbox = cityCoordinates[location] || cityCoordinates["Paris"];
+    // 1. Gestion du Cache
+    const cacheKey = `cache_geo_${location}`; // Nouvelle clé pour éviter les conflits
+    const cachedData = localStorage.getItem(cacheKey);
 
-    // Requête API Overpass
-    fetch(
-      `https://overpass-api.de/api/interpreter?data=[out:json];node['amenity'~'restaurant|cafe|fast_food|bar|pub']${bbox};out;`
-    )
+    if (cachedData) {
+      const { data, timestamp } = JSON.parse(cachedData);
+      if (Date.now() - timestamp < CACHE_DURATION) {
+        console.log("⚡ Chargement depuis le cache (Rapide)");
+        setPlaces(data);
+        setLoading(false);
+        setCurrentPage(1);
+        return; 
+      }
+    }
+
+    // 2. Préparation de l'URL Geoapify
+    const bbox = cityCoordinates[location] || cityCoordinates["Paris"];
+    // On demande : Restaurant, Café, Fast Food, Bar, Pub
+    const categories = "catering.restaurant,catering.cafe,catering.fast_food,catering.bar,catering.pub";
+    
+    const url = `https://api.geoapify.com/v2/places?categories=${categories}&filter=rect:${bbox}&limit=60&apiKey=${API_KEY}`;
+
+    // 3. Appel API
+    fetch(url)
       .then(res => res.json())
       .then(data => {
-        if (!data.elements) return;
+        // Geoapify renvoie "features", pas "elements"
+        if (!data.features) return;
 
-        const cleanData = data.elements
-          .filter(p => p.tags?.name)
-          .map(p => ({
-            id: p.id,
-            name: p.tags.name,
-            type: p.tags.amenity, 
-            cuisine: p.tags.cuisine,
-            // Note aléatoire pour la démo
-            rating: +(Math.random() * (5 - 3.5) + 3.5).toFixed(1)
-          }));
+        const cleanData = data.features.map(f => {
+            // Logique pour déterminer le type (ex: catering.cafe -> cafe)
+            const cats = f.properties.categories || [];
+            let type = "restaurant";
+            if (cats.includes("catering.cafe")) type = "cafe";
+            if (cats.includes("catering.fast_food")) type = "fast_food";
+            if (cats.includes("catering.bar") || cats.includes("catering.pub")) type = "bar";
+
+            // Tentative de trouver la cuisine (ex: catering.restaurant.italian)
+            const cuisineRaw = cats.find(c => c.startsWith("catering.restaurant.")) || "";
+            const cuisine = cuisineRaw.split('.').pop();
+
+            return {
+                id: f.properties.place_id,
+                // Parfois le nom est vide, on prend la rue à la place
+                name: f.properties.name || f.properties.street || "Lieu sans nom",
+                type: type, 
+                cuisine: cuisine !== "restaurant" ? cuisine : null,
+                lat: f.properties.lat,
+                lon: f.properties.lon,
+                // Note aléatoire (car l'API ne donne pas les notes)
+                rating: +(Math.random() * (5 - 3.5) + 3.5).toFixed(1)
+            };
+        }).filter(p => p.name !== "Lieu sans nom"); // On retire les lieux vides
+
+        // 4. Sauvegarde dans le Cache
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data: cleanData,
+          timestamp: Date.now()
+        }));
 
         setPlaces(cleanData);
         setLoading(false);
         setCurrentPage(1);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Erreur API:", err);
         setLoading(false);
       });
-  }, [location]); // Se relance quand 'location' change
+  }, [location]);
 
-  /* ================= OPTIONS DES MENUS ================= */
+  /* ================= OPTIONS ================= */
   const typeOptions = [
     { value: "all", label: "Tout voir", icon: <Layers size={18} /> },
     { value: "restaurant", label: "Restaurants", icon: <Utensils size={18} /> },
@@ -75,17 +114,16 @@ export default function Restaurants() {
     { value: "bar", label: "Bars & Pubs", icon: <Beer size={18} /> },
   ];
 
-  // ICI : On ajoute tes villes avec départements
   const cityOptions = [
     { value: "Paris", label: "Paris (75)", icon: <MapPin size={18} /> },
     { value: "Saint-Ouen", label: "Saint-Ouen (93)", icon: <MapPin size={18} /> },
-    { value: "Neuilly", label: "Neuilly-sur-Seine (92)", icon: <MapPin size={18} /> },
-    { value: "Boulogne", label: "Boulogne-Billancourt (92)", icon: <MapPin size={18} /> },
+    { value: "Neuilly", label: "Neuilly (92)", icon: <MapPin size={18} /> },
+    { value: "Boulogne", label: "Boulogne (92)", icon: <MapPin size={18} /> },
     { value: "Versailles", label: "Versailles (78)", icon: <MapPin size={18} /> },
-    { value: "IDF", label: "Île-de-France (Tout)", icon: <MapPin size={18} /> },
+    { value: "IDF", label: "Île-de-France", icon: <MapPin size={18} /> },
   ];
 
-  /* ================= FILTRAGE CLIENT ================= */
+  /* ================= RENDER & FILTRES ================= */
   const filtered = places
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
     .filter(p => typeFilter === "all" ? true : p.type === typeFilter)
@@ -99,17 +137,14 @@ export default function Restaurants() {
 
   useEffect(() => { setCurrentPage(1); }, [search, sort, typeFilter, location]);
 
-  /* ================= RENDER ================= */
   return (
     <div className="container">
       <div className="hero">
           <h1>Collection {cityOptions.find(c => c.value === location)?.label}</h1>
-          <p>Explorez les meilleures adresses sélectionnées pour vous.</p>
+          <p>Données temps réel • Geoapify API</p>
       </div>
 
       <div className="filters-container">
-        
-        {/* Recherche */}
         <div className="search-wrapper">
           <input 
             placeholder={`Rechercher à ${location}...`}
@@ -118,24 +153,10 @@ export default function Restaurants() {
           />
         </div>
 
-        {/* Filtres */}
         <div className="filters-group">
-          
-          <CustomSelect 
-            options={typeOptions} 
-            value={typeFilter} 
-            onChange={setTypeFilter} 
-          />
-
-          {/* SÉLECTEUR DE VILLE MIS À JOUR */}
-          <CustomSelect 
-            options={cityOptions} 
-            value={location} 
-            onChange={setLocation} 
-          />
-
-          {/* Options de tri simple */}
-           <div style={{minWidth: '200px'}}> {/* Wrapper pour aligner si besoin */}
+          <CustomSelect options={typeOptions} value={typeFilter} onChange={setTypeFilter} />
+          <CustomSelect options={cityOptions} value={location} onChange={setLocation} />
+          <div style={{minWidth: '200px'}}>
                <CustomSelect
                 options={[
                     { value: "desc", label: "Note : Haute", icon: "⭐" },
@@ -145,13 +166,13 @@ export default function Restaurants() {
                 onChange={setSort}
                 />
             </div>
-
         </div>
       </div>
 
       {loading ? (
-        <div style={{textAlign: "center", padding: "50px", color: "#002395", fontSize: "1.2rem"}}>
-           Recherche des adresses à {location}...
+        <div style={{textAlign: "center", padding: "100px", color: "#002395"}}>
+           <div className="spinner" style={{margin: '0 auto 20px'}}></div>
+           <p>Connexion satellite en cours...</p>
         </div>
       ) : (
         <>
@@ -162,9 +183,7 @@ export default function Restaurants() {
           </div>
 
           {filtered.length === 0 && (
-             <p style={{textAlign:'center', marginTop: '40px'}}>
-               Aucun lieu trouvé à {location}. Essayez une autre catégorie.
-             </p>
+             <p style={{textAlign:'center', marginTop: '40px'}}>Aucun lieu trouvé.</p>
           )}
 
           {totalPages > 1 && (

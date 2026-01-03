@@ -1,6 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { MapPin, ArrowLeft, Star, Utensils } from "lucide-react"; // Assure-toi d'avoir lucide-react
+import { MapPin, ArrowLeft, Star, Utensils, Globe, Phone } from "lucide-react"; 
+
+// On réutilise la même clé API que pour la liste
+const API_KEY = "b23395c86f1b46ec8dceb5233cb8cef8";
 
 export default function RestaurantDetails() {
   const { id } = useParams();
@@ -8,26 +11,45 @@ export default function RestaurantDetails() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. On utilise l'API Geoapify "place-details" pour récupérer les infos via l'ID
     fetch(
-      `https://overpass-api.de/api/interpreter?data=[out:json];node(${id});out;`
+      `https://api.geoapify.com/v2/place-details?id=${id}&apiKey=${API_KEY}`
     )
       .then(res => res.json())
       .then(data => {
-        if (data.elements && data.elements.length > 0) {
-          const p = data.elements[0];
+        // Geoapify renvoie un tableau "features"
+        if (data.features && data.features.length > 0) {
+          const props = data.features[0].properties;
+          
+          // Logique pour retrouver le type et la cuisine
+          const cats = props.categories || [];
+          let type = "Lieu";
+          if (cats.includes("catering.restaurant")) type = "Restaurant";
+          else if (cats.includes("catering.cafe")) type = "Café";
+          else if (cats.includes("catering.bar")) type = "Bar";
+          
+          // Cuisine (ex: catering.restaurant.italian -> italian)
+          const cuisineRaw = cats.find(c => c.startsWith("catering.restaurant.")) || "";
+          const cuisine = cuisineRaw.split('.').pop();
+
           setPlace({
-            name: p.tags?.name,
-            lat: p.lat,
-            lon: p.lon,
-            type: p.tags?.amenity,
-            cuisine: p.tags?.cuisine,
-            website: p.tags?.website,
-            phone: p.tags?.["contact:phone"] || p.tags?.phone
+            name: props.name || props.street || "Lieu sans nom",
+            lat: props.lat,
+            lon: props.lon,
+            type: type,
+            cuisine: cuisine !== "restaurant" ? cuisine : null,
+            // Geoapify range parfois le site/téléphone dans "contact" ou à la racine
+            website: props.website || props.contact?.website,
+            phone: props.phone || props.contact?.phone,
+            address: props.formatted
           });
         }
         setLoading(false);
       })
-      .catch(err => setLoading(false));
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
   }, [id]);
 
   if (loading) return <div className="loading-screen">Chargement de l'expérience...</div>;
@@ -50,30 +72,42 @@ export default function RestaurantDetails() {
         <div className="details-header">
           <div className="tag-royal">
              <Utensils size={14} style={{marginRight:5}}/>
-             {place.type === 'restaurant' ? 'Restaurant Gastronomique' : place.type?.toUpperCase()}
+             {place.type.toUpperCase()}
              {place.cuisine && ` • ${place.cuisine.toUpperCase()}`}
           </div>
           
           <h1>{place.name}</h1>
           
           <div className="stars-royal">
-             <Star size={16} fill="#d4af37" color="#d4af37"/>
-             <Star size={16} fill="#d4af37" color="#d4af37"/>
-             <Star size={16} fill="#d4af37" color="#d4af37"/>
-             <Star size={16} fill="#d4af37" color="#d4af37"/>
-             <Star size={16} fill="#d4af37" color="#d4af37"/>
+             {[...Array(5)].map((_, i) => (
+                <Star key={i} size={16} fill="#d4af37" color="#d4af37"/>
+             ))}
              <span style={{color: '#0a0a0a', marginLeft: '10px', fontSize: '0.9rem'}}>Excellence</span>
           </div>
         </div>
 
         {/* CONTENU & INFO */}
         <div className="details-info">
-            <p>Une destination culinaire d'exception située au cœur du quartier.</p>
-            {place.phone && <p><strong>Téléphone :</strong> {place.phone}</p>}
-            {place.website && <p><strong>Site Web :</strong> <a href={place.website} target="_blank" rel="noreferrer" style={{textDecoration:'underline'}}>Visiter le site</a></p>}
+            <p>Une destination culinaire d'exception : {place.address}</p>
+            
+            <div style={{display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '20px', flexWrap: 'wrap'}}>
+                {place.phone && (
+                    <div style={{display:'flex', alignItems:'center', gap:'8px', color: '#0a0a0a'}}>
+                        <Phone size={16} color="#002395"/> 
+                        <strong>{place.phone}</strong>
+                    </div>
+                )}
+                
+                {place.website && (
+                    <a href={place.website} target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', gap:'8px', color: '#002395', textDecoration:'underline'}}>
+                        <Globe size={16} /> 
+                        Visiter le site officiel
+                    </a>
+                )}
+            </div>
         </div>
 
-        {/* --- LA VRAIE MAP AU CENTRE --- */}
+        {/* --- LA VRAIE MAP AU CENTRE (Corrigée) --- */}
         <div className="map-container-royal">
             <iframe
               title="Map"
@@ -83,16 +117,17 @@ export default function RestaurantDetails() {
               scrolling="no"
               marginHeight="0"
               marginWidth="0"
-              // Astuce pour avoir Google Maps sans clé API (Embed mode)
+              // Voici le lien correct pour embed Google Maps gratuitement
               src={`https://maps.google.com/maps?q=${place.lat},${place.lon}&hl=fr&z=16&output=embed`}
-              style={{ filter: "grayscale(20%) contrast(1.1)" }} // Un look un peu plus "Luxe/Sobres"
+              style={{ filter: "grayscale(20%) contrast(1.1)" }}
             ></iframe>
         </div>
 
         {/* PIED DE PAGE AVEC BOUTON ACTION */}
         <div className="details-footer">
            <a
-              href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lon}`}
+              // Lien correct pour ouvrir l'appli GPS
+              href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lon}`}
               target="_blank"
               rel="noreferrer"
               className="btn-gps-royal"
