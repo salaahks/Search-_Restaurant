@@ -4,23 +4,22 @@ import RestaurantCard from "../components/RestaurantCard";
 import CustomSelect from "../components/CustomSelect";
 
 const ITEMS_PER_PAGE = 12;
-const CACHE_DURATION = 1000 * 60 * 60 * 24; // 24h de cache
+const CACHE_DURATION = 1000 * 60 * 60 * 24; 
 
-// TA CLÉ API
-const API_KEY = "b23395c86f1b46ec8dceb5233cb8cef8";
+const API_KEY = import.meta.env.VITE_GEOAPIFY_KEY;
+
 
 export default function Restaurants() {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // --- ETATS ---
+  // ... (Le reste de tes états ne change pas)
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("desc");
   const [location, setLocation] = useState("Paris");
   const [typeFilter, setTypeFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // --- COORDONNÉES (Format Geoapify : LonMin,LatMin,LonMax,LatMax) ---
   const cityCoordinates = {
     "Paris": "2.224,48.815,2.469,48.902",
     "Saint-Ouen": "2.318,48.895,2.350,48.915",
@@ -35,8 +34,15 @@ export default function Restaurants() {
     setLoading(true);
     setPlaces([]); 
 
+    // Vérification de sécurité : Si la clé n'est pas chargée
+    if (!API_KEY) {
+        console.error("ERREUR : Clé API manquante. Vérifie ton fichier .env");
+        setLoading(false);
+        return;
+    }
+
     // 1. Gestion du Cache
-    const cacheKey = `cache_geo_${location}`; // Nouvelle clé pour éviter les conflits
+    const cacheKey = `cache_geo_${location}`; 
     const cachedData = localStorage.getItem(cacheKey);
 
     if (cachedData) {
@@ -52,44 +58,37 @@ export default function Restaurants() {
 
     // 2. Préparation de l'URL Geoapify
     const bbox = cityCoordinates[location] || cityCoordinates["Paris"];
-    // On demande : Restaurant, Café, Fast Food, Bar, Pub
     const categories = "catering.restaurant,catering.cafe,catering.fast_food,catering.bar,catering.pub";
     
+    // Utilisation de la variable API_KEY ici
     const url = `https://api.geoapify.com/v2/places?categories=${categories}&filter=rect:${bbox}&limit=60&apiKey=${API_KEY}`;
 
-    // 3. Appel API
     fetch(url)
       .then(res => res.json())
       .then(data => {
-        // Geoapify renvoie "features", pas "elements"
         if (!data.features) return;
 
         const cleanData = data.features.map(f => {
-            // Logique pour déterminer le type (ex: catering.cafe -> cafe)
             const cats = f.properties.categories || [];
             let type = "restaurant";
             if (cats.includes("catering.cafe")) type = "cafe";
             if (cats.includes("catering.fast_food")) type = "fast_food";
             if (cats.includes("catering.bar") || cats.includes("catering.pub")) type = "bar";
 
-            // Tentative de trouver la cuisine (ex: catering.restaurant.italian)
             const cuisineRaw = cats.find(c => c.startsWith("catering.restaurant.")) || "";
             const cuisine = cuisineRaw.split('.').pop();
 
             return {
                 id: f.properties.place_id,
-                // Parfois le nom est vide, on prend la rue à la place
                 name: f.properties.name || f.properties.street || "Lieu sans nom",
                 type: type, 
                 cuisine: cuisine !== "restaurant" ? cuisine : null,
                 lat: f.properties.lat,
                 lon: f.properties.lon,
-                // Note aléatoire (car l'API ne donne pas les notes)
                 rating: +(Math.random() * (5 - 3.5) + 3.5).toFixed(1)
             };
-        }).filter(p => p.name !== "Lieu sans nom"); // On retire les lieux vides
+        }).filter(p => p.name !== "Lieu sans nom"); 
 
-        // 4. Sauvegarde dans le Cache
         localStorage.setItem(cacheKey, JSON.stringify({
           data: cleanData,
           timestamp: Date.now()
@@ -105,6 +104,8 @@ export default function Restaurants() {
       });
   }, [location]);
 
+  // ... (Le reste de ton JSX reste identique) ...
+  
   /* ================= OPTIONS ================= */
   const typeOptions = [
     { value: "all", label: "Tout voir", icon: <Layers size={18} /> },
@@ -123,7 +124,6 @@ export default function Restaurants() {
     { value: "IDF", label: "Île-de-France", icon: <MapPin size={18} /> },
   ];
 
-  /* ================= RENDER & FILTRES ================= */
   const filtered = places
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
     .filter(p => typeFilter === "all" ? true : p.type === typeFilter)
