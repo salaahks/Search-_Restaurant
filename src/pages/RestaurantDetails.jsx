@@ -2,8 +2,8 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { MapPin, ArrowLeft, Star, Utensils, Globe, Phone } from "lucide-react"; 
 
-// On réutilise la même clé API que pour la liste
-const API_KEY = "b23395c86f1b46ec8dceb5233cb8cef8";
+
+const API_KEY = import.meta.env.VITE_GEOAPIFY_KEY;
 
 export default function RestaurantDetails() {
   const { id } = useParams();
@@ -11,7 +11,7 @@ export default function RestaurantDetails() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. On utilise l'API Geoapify "place-details" pour récupérer les infos via l'ID
+ 
     fetch(
       `https://api.geoapify.com/v2/place-details?id=${id}&apiKey=${API_KEY}`
     )
